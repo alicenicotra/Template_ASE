@@ -1,0 +1,2644 @@
+
+
+
+ARM Macro Assembler    Page 1 
+
+
+    1 00000000         ; ******************************************************
+                       **********************
+    2 00000000         ; * Name: ASM_funct.s
+    3 00000000         ; * Description: Raccolta completa di funzioni Assembly 
+                       per esame LPC17xx
+    4 00000000         ; * Platform: Cortex-M3 (LPC1768)
+    5 00000000         ; ******************************************************
+                       **********************
+    6 00000000         
+    7 00000000         ; --- DIRETTIVE STANDARD ---
+    8 00000000                 PRESERVE8                    ; Allineamento stac
+                                                            k a 8 byte
+    9 00000000                 THUMB                        ; Set di istruzioni
+                                                             Thumb (Obbligatori
+                                                            o per Cortex-M)
+   10 00000000         
+   11 00000000         ; --- IMPORTAZIONI C ---
+   12 00000000                 IMPORT           __aeabi_fdiv ; Importa funzione
+                                                             divisione float (s
+                                                            e serve)
+   13 00000000         
+   14 00000000         ; --- DEFINIZIONE AREA CODICE ---
+   15 00000000                 AREA             |.text|, CODE, READONLY
+   16 00000000         
+   17 00000000         ; ======================================================
+                       ======================
+   18 00000000         ; UTILIZZO DELLE VARIABILI DEFINITE IN C
+   19 00000000         ; ======================================================
+                       ======================
+   20 00000000         ; 1. Dichiarazione in C:
+   21 00000000         ;      // Variabile singola
+   22 00000000         ;      extern uint32_t my_counter;
+   23 00000000         ;      // Array di byte o word
+   24 00000000         ;      extern uint8_t buffer[10];
+   25 00000000         ; 
+   26 00000000         ; 2. Dichiarazione in Assembly:
+   27 00000000         ;      IMPORT my_counter
+   28 00000000         ;      IMPORT buffer
+   29 00000000         ;
+   30 00000000         ; 3. Lettura / Scrittura:
+   31 00000000         ;      LDR     r0, =my_counter   ; r0 punta a my_counter
+                       
+   32 00000000         ;      LDR     r1, [r0]          ; legge valore della va
+                       riabile
+   33 00000000         ;      ADD     r1, r1, #1        ; operazione qualsiasi
+   34 00000000         ;      STR     r1, [r0]          ; scrive valore aggiorn
+                       ato
+   35 00000000         ;
+   36 00000000         ;      LDR     r0, =buffer
+   37 00000000         ;      LDRB    r1, [r0, #3]      ; legge buffer[3]
+   38 00000000         ;      MOV     r1, #0xFF
+   39 00000000         ;      STRB    r1, [r0, #3]      ; scrive buffer[3] = 0x
+                       FF
+   40 00000000         ;
+   41 00000000         ; 4. Offset per array:
+   42 00000000         ;      - Array di byte: usa direttamente l’indice
+   43 00000000         ;      - Array di word (uint32_t): moltiplica l’indice p
+                       er 4
+   44 00000000         ;        esempio: LDR r2, [r0, r3, LSL #2] ; r3 = indice
+
+
+
+ARM Macro Assembler    Page 2 
+
+
+                       
+   45 00000000         ;
+   46 00000000         ; 5. Registri extra:
+   47 00000000         ;      - Se servono più registri di quelli standard (r0-
+                       r3), salvare e ripristinare
+   48 00000000         ;        registri non volatili (r4-r11) usando lo stack:
+                       
+   49 00000000         ;           PUSH {r4-r7, lr}
+   50 00000000         ;           ... codice ...
+   51 00000000         ;           POP  {r4-r7, pc}
+   52 00000000         ;
+   53 00000000         ; 6. Risultati delle funzioni:
+   54 00000000         ;      - Il valore di ritorno va sempre in r0
+   55 00000000         ;      - Puntatori o array si passano in r0
+   56 00000000         
+   57 00000000         
+   58 00000000         ; ======================================================
+                       ======================
+   59 00000000         ; PASSAGGIO DELLE VARIABILI COME ARGOMENTI DELLA FUNZION
+                       E
+   60 00000000         ; ======================================================
+                       ======================
+   61 00000000         ; 1. Registri utilizzati per gli argomenti:
+   62 00000000         ;      - r0, r1, r2, r3 sono usati per i primi 4 argomen
+                       ti.
+   63 00000000         ;      - Se ci sono più di 4 argomenti, i successivi van
+                       no nello stack.
+   64 00000000         ;
+   65 00000000         ; 2. Tipi comuni:
+   66 00000000         ;      - int, uint32_t, puntatori -> r0, r1, r2, r3
+   67 00000000         ;      - float/double -> passati in r0-r1 (float singolo
+                       ) o su stack (double)
+   68 00000000         ;
+   69 00000000         ; 3. Lettura / scrittura degli argomenti:
+   70 00000000         ;      - Il primo argomento della funzione è in r0
+   71 00000000         ;      - Il secondo argomento in r1, il terzo in r2, il 
+                       quarto in r3
+   72 00000000         ;
+   73 00000000         ; 4. Esempio:
+   74 00000000         ;      // Funzione C: int sum(int a, int b, int c)
+   75 00000000         ;      int sum(int a, int b, int c) { return a+b+c; }
+   76 00000000         ;
+   77 00000000         ;      ; In ASM:
+   78 00000000         ;      sum PROC
+   79 00000000         ;          ; r0 = a, r1 = b, r2 = c
+   80 00000000         ;          ADD r0, r0, r1      ; r0 = a + b
+   81 00000000         ;          ADD r0, r0, r2      ; r0 = a + b + c
+   82 00000000         ;          BX  lr              ; ritorno (r0 contiene ri
+                       sultato)
+   83 00000000         ;      ENDP
+   84 00000000         ;
+   85 00000000         ; 5. Puntatori come argomenti:
+   86 00000000         ;      - Se passi un array: int fun(uint32_t *arr, int n
+                       )
+   87 00000000         ;          r0 = puntatore ad arr
+   88 00000000         ;          r1 = n
+   89 00000000         ;      - Per leggere elementi: LDR / STR con offset
+   90 00000000         ;          LDR r2, [r0, r3, LSL #2] ; r3 = indice
+   91 00000000         
+
+
+
+ARM Macro Assembler    Page 3 
+
+
+   92 00000000         ; ======================================================
+                       ======================
+   93 00000000         ; PASSAGGIO DI UN VETTORE (ARRAY)
+   94 00000000         ;      // C: int sum_array(int *arr, int n)
+   95 00000000         ;      // Ritorna la somma dei primi n elementi
+   96 00000000         ;
+   97 00000000         ;      ; In ASM:
+   98 00000000         ;      sum_array PROC
+   99 00000000         ;          ; r0 = puntatore all'array arr
+  100 00000000         ;          ; r1 = numero elementi n
+  101 00000000         ;          
+  102 00000000         ;          MOV   r2, #0        ; somma = 0
+  103 00000000         ;          MOV   r3, #0        ; indice i = 0
+  104 00000000         ;
+  105 00000000         ;loop_arr
+  106 00000000         ; Controllo fine array
+  107 00000000         ;          CMP   r3, r1
+  108 00000000         ;          BGE   end_arr
+  109 00000000         ; Leggi elemento arr[i] (32 bit)
+  110 00000000         ;          LDR   r4, [r0, r3, LSL #2]  ; r4 = arr[i]
+  111 00000000         ; Aggiungi alla somma
+  112 00000000         ;          ADD   r2, r2, r4
+  113 00000000         ; Incrementa indice
+  114 00000000         ;          ADD   r3, r3, #1
+  115 00000000         ;          B     loop_arr
+  116 00000000         ;
+  117 00000000         ;end_arr
+  118 00000000         ; Ritorna risultato in r0
+  119 00000000         ;          MOV   r0, r2
+  120 00000000         ;          BX    lr
+  121 00000000         ;      ENDP
+  122 00000000         ;
+  123 00000000         ; Nota:
+  124 00000000         ;  - Puntatore all'array è sempre in r0
+  125 00000000         ;  - Per leggere arr[i] si usa: LDR rX, [r0, r3, LSL #2]
+                       
+  126 00000000         ;    LSL #2 perché gli elementi sono word (4 byte)
+  127 00000000         
+  128 00000000         
+  129 00000000         ; ------------------------------------------------------
+                       ----------------------
+  130 00000000         ; Function: compress
+  131 00000000         ; Descrizione: Calcola le differenze tra elementi adiace
+                       nti.
+  132 00000000         ;              Conta quante differenze sono negative.
+  133 00000000         ; Input:  R0 = Vettore, R1 = Num Elementi, R2 = Vettore 
+                       Risultato
+  134 00000000         ; Output: R0 = Conteggio differenze negative
+  135 00000000         ; ------------------------------------------------------
+                       ----------------------
+  136 00000000                 EXPORT           compress
+  137 00000000         compress
+                               PROC
+  138 00000000 46EC            MOV              r12, sp     ; (Opzionale) Frame
+                                                             pointer
+  139 00000002 E92D 4DF0       STMFD            sp!, {r4-r8,r10-r11,lr}
+  140 00000006         
+  141 00000006 F04F 0300       MOV              R3, #0      ; Azzera accumulato
+                                                            re (non usato qui m
+
+
+
+ARM Macro Assembler    Page 4 
+
+
+                                                            a buona prassi)
+  142 0000000A F04F 0400       MOV              R4, #0      ; Indice i = 0
+  143 0000000E F04F 0700       MOV              R7, #0      ; Count (risultato)
+                                                             = 0
+  144 00000012         
+  145 00000012 5D05    loop_cp LDRB             R5, [R0, R4] ; R5 = VETT[i]
+  146 00000014 F104 0901       ADD              R9, R4, #1  ; Indice i+1
+  147 00000018 F810 6009       LDRB             R6, [R0, R9] ; R6 = VETT[i+1]
+  148 0000001C         
+  149 0000001C EBB5 0806       SUBS             R8, R5, R6  ; R8 = VETT[i] - VE
+                                                            TT[i+1]
+  150 00000020 F802 8004       STRB             R8, [R2, R4] ; Salva risultato 
+                                                            in RES[i]
+  151 00000024         
+  152 00000024         ; Se risultato < 0 (Flag Negative=1), incrementa count
+  153 00000024 BF48 1C7F       ADDMI            R7, R7, #1
+  154 00000028         
+  155 00000028 F104 0401       ADD              R4, #1      ; i++
+  156 0000002C 428C            CMP              R4, R1      ; if i == numElemen
+                                                            ti (Attenzione: meg
+                                                            lio N-1 per le diff
+                                                            erenze)
+  157 0000002E D1F0            BNE              loop_cp
+  158 00000030         
+  159 00000030 4638            MOV              R0, R7      ; Return count in R
+                                                            0
+  160 00000032         
+  161 00000032 E8BD 8DF0       LDMFD            sp!, {r4-r8,r10-r11,pc}
+  162 00000036                 ENDP
+  163 00000036         
+  164 00000036         ; ------------------------------------------------------
+                       ----------------------
+  165 00000036         ; Function: sopra_la_media
+  166 00000036         ; Descrizione: Calcola la media e conta quanti valori so
+                       no maggiori della media.
+  167 00000036         ; Input:  R0 = Vettore, R1 = Num Elementi
+  168 00000036         ; Output: R0 = Conteggio
+  169 00000036         ; ------------------------------------------------------
+                       ----------------------
+  170 00000036                 EXPORT           sopra_la_media
+  171 00000036         sopra_la_media
+                               PROC
+  172 00000036 46EC            MOV              r12, sp
+  173 00000038 E92D 4DF0       STMFD            sp!, {r4-r8,r10-r11,lr}
+  174 0000003C         
+  175 0000003C F04F 0300       MOV              R3, #0      ; Somma = 0
+  176 00000040 F04F 0400       MOV              R4, #0      ; i = 0
+  177 00000044         
+  178 00000044         ; --- Fase 1: Calcolo Somma ---
+  179 00000044 5D02    loop2   LDRB             R2, [R0, R4] ; Carica byte
+  180 00000046 4413            ADD              R3, R3, R2  ; Somma += val
+  181 00000048 F104 0401       ADD              R4, R4, #1  ; i++
+  182 0000004C 428C            CMP              R4, R1
+  183 0000004E D1F9            BNE              loop2
+  184 00000050         
+  185 00000050         ; --- Fase 2: Calcolo Media ---
+  186 00000050 FBB3 F3F1       UDIV             R3, R3, R1  ; R3 = Somma / N (D
+                                                            ivisione Intera Har
+                                                            dware)
+
+
+
+ARM Macro Assembler    Page 5 
+
+
+  187 00000054         
+  188 00000054         ; --- Fase 3: Conteggio ---
+  189 00000054 F04F 0400       MOV              R4, #0      ; Reset i = 0
+  190 00000058 F04F 0500       MOV              R5, #0      ; Count = 0
+  191 0000005C         
+  192 0000005C 5D02    loop_chk
+                               LDRB             R2, [R0, R4] ; Carica byte
+  193 0000005E 429A            CMP              R2, R3      ; Confronta val con
+                                                             Media (R3)
+  194 00000060 BFC8 1C6D       ADDGT            R5, R5, #1  ; Se > Media, count
+                                                            ++
+  195 00000064         
+  196 00000064 F104 0401       ADD              R4, R4, #1  ; i++
+  197 00000068 428C            CMP              R4, R1
+  198 0000006A D1F7            BNE              loop_chk
+  199 0000006C         
+  200 0000006C 4628            MOV              R0, R5      ; Return count
+  201 0000006E         
+  202 0000006E E8BD 8DF0       LDMFD            sp!, {r4-r8,r10-r11,pc}
+  203 00000072                 ENDP
+  204 00000072         
+  205 00000072         ; ------------------------------------------------------
+                       ----------------------
+  206 00000072         ; Function: get_and_sort
+  207 00000072         ; Descrizione: Inserimento ordinato di un valore in un a
+                       rray (tipo Insertion Step).
+  208 00000072         ; Input:  R0 = Vettore, R1 = Valore da inserire, R2 = In
+                       dice inserimento/N
+  209 00000072         ; ------------------------------------------------------
+                       ----------------------
+  210 00000072                 EXPORT           get_and_sort
+  211 00000072         get_and_sort
+                               PROC
+  212 00000072 46EC            MOV              r12, sp
+  213 00000074 E92D 4DF0       STMFD            sp!, {r4-r8,r10-r11,lr}
+  214 00000078         
+  215 00000078 4402            ADD              R2, R0, R2  ; R2 punta alla fin
+                                                            e dell'array (Base 
+                                                            + Offset)
+  216 0000007A         
+  217 0000007A F1A2 0201 
+                       loopSort
+                               SUB              R2, R2, #1  ; Indice corrente (
+                                                            j)
+  218 0000007E F1A2 0301       SUB              R3, R2, #1  ; Indice precedente
+                                                             (j-1)
+  219 00000082         
+  220 00000082 4298            CMP              R0, R3      ; Controllo bounds 
+                                                            (siamo arrivati all
+                                                            'inizio?)
+  221 00000084 D804            BHI              fine_sort   ; Se R3 < R0 (Base)
+                                                            , finito
+  222 00000086         
+  223 00000086 781C            LDRB             R4, [R3]    ; Carica VETT[j-1]
+  224 00000088 428C            CMP              R4, R1      ; Confronta con Val
+                                                            ore
+  225 0000008A D801            BHI              fine_sort   ; Se VETT[j-1] > Va
+                                                            lore, ho trovato il
+                                                             posto
+
+
+
+ARM Macro Assembler    Page 6 
+
+
+  226 0000008C         
+  227 0000008C 7014            STRB             R4, [R2]    ; Altrimenti Shift:
+                                                             VETT[j] = VETT[j-1
+                                                            ]
+  228 0000008E E7F4            B                loopSort
+  229 00000090         
+  230 00000090 7011    fine_sort
+                               STRB             R1, [R2]    ; Inserisci valore 
+                                                            nella posizione tro
+                                                            vata
+  231 00000092 4608            MOV              R0, R1      ; Return value (opz
+                                                            ionale)
+  232 00000094         
+  233 00000094 E8BD 8DF0       LDMFD            sp!, {r4-r8,r10-r11,pc}
+  234 00000098                 ENDP
+  235 00000098         
+  236 00000098         ; ------------------------------------------------------
+                       ----------------------
+  237 00000098         ; Function: contatore_inrange
+  238 00000098         ; Descrizione: Conta valori compresi tra il Primo e l'Ul
+                       timo elemento del vettore.
+  239 00000098         ; Input:  R0 = Vettore (Word), R1 = Num Elementi
+  240 00000098         ; Output: R0 = Count
+  241 00000098         ; ------------------------------------------------------
+                       ----------------------
+  242 00000098                 EXPORT           contatore_inrange
+  243 00000098         contatore_inrange
+                               PROC
+  244 00000098 46EC            MOV              r12, sp
+  245 0000009A E92D 4DF0       STMFD            sp!, {r4-r8,r10-r11,lr}
+  246 0000009E         
+  247 0000009E 6802            LDR              R2, [R0]    ; R2 = VETT[0] (Lim
+                                                            ite Inf)
+  248 000000A0         
+  249 000000A0 F1A1 0A01       SUB              R10, R1, #1 ; Indice ultimo (N-
+                                                            1)
+  250 000000A4 EA4F 0B8A       LSL              R11, R10, #2 ; Offset ultimo by
+                                                            te (N-1)*4
+  251 000000A8 F850 300B       LDR              R3, [R0, R11] ; R3 = VETT[N-1] 
+                                                            (Limite Sup)
+  252 000000AC         
+  253 000000AC F04F 0404       MOV              R4, #4      ; Inizia dal second
+                                                            o elemento (offset 
+                                                            4)
+  254 000000B0 F04F 0500       MOV              R5, #0      ; Count = 0
+  255 000000B4         
+  256 000000B4 455C    loop3   CMP              R4, R11     ; Se siamo arrivati
+                                                             all'ultimo element
+                                                            o
+  257 000000B6 DA09            BGE              end_range   ; Esci (esclude l'u
+                                                            ltimo dal conteggio
+                                                            )
+  258 000000B8         
+  259 000000B8 5906            LDR              R6, [R0, R4] ; Carica valore co
+                                                            rrente
+  260 000000BA         
+  261 000000BA 4296            CMP              R6, R2      ; Valore > Primo?
+  262 000000BC DD03            BLE              skip_rg
+  263 000000BE         
+
+
+
+ARM Macro Assembler    Page 7 
+
+
+  264 000000BE 429E            CMP              R6, R3      ; Valore < Ultimo?
+  265 000000C0 DA01            BGE              skip_rg
+  266 000000C2         
+  267 000000C2 F105 0501       ADD              R5, R5, #1  ; Count++
+  268 000000C6         
+  269 000000C6 F104 0404 
+                       skip_rg ADD              R4, R4, #4  ; i++ (word step)
+  270 000000CA E7F3            B                loop3
+  271 000000CC         
+  272 000000CC         end_range
+  273 000000CC 4628            MOV              R0, R5      ; Return count
+  274 000000CE E8BD 8DF0       LDMFD            sp!, {r4-r8,r10-r11,pc}
+  275 000000D2                 ENDP
+  276 000000D2         
+  277 000000D2         ; ------------------------------------------------------
+                       ----------------------
+  278 000000D2         ; Function: my_division
+  279 000000D2         ; Descrizione: Wrapper per divisione float.
+  280 000000D2         ; Input:  R0 -> Puntatore a float A, R1 -> Puntatore a f
+                       loat B
+  281 000000D2         ; Output: R0 = Risultato float
+  282 000000D2         ; ------------------------------------------------------
+                       ----------------------
+  283 000000D2                 EXPORT           my_division
+  284 000000D2         my_division
+                               PROC
+  285 000000D2 B5F0            PUSH             {r4-r7,LR}
+  286 000000D4         
+  287 000000D4 6802            LDR              R2, [R0]    ; Dereferenzia punt
+                                                            atore A
+  288 000000D6 680B            LDR              R3, [R1]    ; Dereferenzia punt
+                                                            atore B
+  289 000000D8 4610            MOV              R0, R2      ; Metti valori nei 
+                                                            registri per la cal
+                                                            l
+  290 000000DA 4619            MOV              R1, R3
+  291 000000DC         
+  292 000000DC F7FF FFFE       BL               __aeabi_fdiv 
+                                                            ; Chiama libreria C
+                                                            
+  293 000000E0         
+  294 000000E0 BDF0            POP              {R4-R7, PC}
+  295 000000E2                 ENDP
+  296 000000E2         
+  297 000000E2         ; ------------------------------------------------------
+                       ----------------------
+  298 000000E2         ; Function: count_negative_and_odd
+  299 000000E2         ; Descrizione: Conta numeri negativi E dispari.
+  300 000000E2         ; Input:  R0 = Vettore (Word), R1 = Num Elementi
+  301 000000E2         ; Output: R0 = Count
+  302 000000E2         ; ------------------------------------------------------
+                       ----------------------
+  303 000000E2                 EXPORT           count_negative_and_odd
+  304 000000E2         count_negative_and_odd
+                               PROC
+  305 000000E2 46EC            MOV              r12, sp
+  306 000000E4 E92D 4DF0       STMFD            sp!, {r4-r8,r10-r11,lr}
+  307 000000E8         
+  308 000000E8 F04F 0200       MOV              R2, #0      ; Offset i = 0
+
+
+
+ARM Macro Assembler    Page 8 
+
+
+  309 000000EC EA4F 0181       LSL              R1, R1, #2  ; Converti N in N*4
+                                                             (dimensione byte)
+  310 000000F0 F04F 0300       MOV              R3, #0      ; Count = 0
+  311 000000F4         
+  312 000000F4 5884    loopodd LDR              R4, [R0, R2] ; Carica Word
+  313 000000F6         
+  314 000000F6 2C00            CMP              R4, #0      ; Check Negativo
+  315 000000F8 DA04            BGE              next_odd    ; Se >= 0, salta
+  316 000000FA         
+  317 000000FA F014 0F01       TST              R4, #1      ; Check Dispari (Te
+                                                            st LSB)
+  318 000000FE D001            BEQ              next_odd    ; Se 0 (Pari), salt
+                                                            a
+  319 00000100         
+  320 00000100 F103 0301       ADD              R3, R3, #1  ; Trovato! Count++
+  321 00000104         
+  322 00000104         next_odd
+  323 00000104 F102 0204       ADD              R2, R2, #4  ; i++
+  324 00000108 428A            CMP              R2, R1
+  325 0000010A D1F3            BNE              loopodd
+  326 0000010C         
+  327 0000010C 4618            MOV              R0, R3
+  328 0000010E E8BD 8DF0       LDMFD            sp!, {r4-r8,r10-r11,pc}
+  329 00000112                 ENDP
+  330 00000112         
+  331 00000112         ; ------------------------------------------------------
+                       ----------------------
+  332 00000112         ; Function: find_max
+  333 00000112         ; Descrizione: Trova il valore massimo in un array di Wo
+                       rd (32bit signed).
+  334 00000112         ; Input:  R0 = Vettore, R1 = Num Elementi
+  335 00000112         ; Output: R0 = Valore Massimo
+  336 00000112         ; ------------------------------------------------------
+                       ----------------------
+  337 00000112                 EXPORT           find_max
+  338 00000112         find_max
+                               PROC
+  339 00000112 B530            PUSH             {r4-r5, lr}
+  340 00000114         
+  341 00000114 6802            LDR              r2, [r0]    ; Assumi Max = VETT
+                                                            [0]
+  342 00000116 F04F 0304       MOV              r3, #4      ; Offset parte da 4
+                                                             (secondo elemento)
+                                                            
+  343 0000011A EA4F 0181       LSL              r1, r1, #2  ; N * 4 byte
+  344 0000011E         
+  345 0000011E 428B    loop_max
+                               CMP              r3, r1      ; Finito?
+  346 00000120 DA06            BGE              end_max
+  347 00000122         
+  348 00000122 58C4            LDR              r4, [r0, r3] ; Carica VETT[i]
+  349 00000124 4294            CMP              r4, r2      ; Confronta con Max
+                                                             attuale
+  350 00000126 BFC8 4622       MOVGT            r2, r4      ; Se VETT[i] > Max,
+                                                             aggiorna Max (GT =
+                                                             Signed Greater Tha
+                                                            n)
+  351 0000012A         
+  352 0000012A F103 0304       ADD              r3, r3, #4  ; i++
+
+
+
+ARM Macro Assembler    Page 9 
+
+
+  353 0000012E E7F6            B                loop_max
+  354 00000130         
+  355 00000130 4610    end_max MOV              r0, r2      ; Return Max
+  356 00000132 BD30            POP              {r4-r5, pc}
+  357 00000134                 ENDP
+  358 00000134         
+  359 00000134         ; ------------------------------------------------------
+                       ----------------------
+  360 00000134         ; Function: string_to_upper
+  361 00000134         ; Descrizione: Converte una stringa in MAIUSCOLO (in-pla
+                       ce).
+  362 00000134         ; Input:  R0 = Indirizzo stringa
+  363 00000134         ; Output: Nessuno (Modifica la memoria)
+  364 00000134         ; ------------------------------------------------------
+                       ----------------------
+  365 00000134                 EXPORT           string_to_upper
+  366 00000134         string_to_upper
+                               PROC
+  367 00000134 B510            PUSH             {r4, lr}
+  368 00000136 4601            MOV              r1, r0      ; Copia puntatore
+  369 00000138         
+  370 00000138 780A    loop_upper
+                               LDRB             r2, [r1]    ; Leggi carattere
+  371 0000013A 2A00            CMP              r2, #0      ; Fine stringa?
+  372 0000013C D009            BEQ              end_upper
+  373 0000013E         
+  374 0000013E 2A61            CMP              r2, #'a'    ; Se < 'a', non è m
+                                                            inuscolo
+  375 00000140 DB04            BLT              skip_upper
+  376 00000142 2A7A            CMP              r2, #'z'    ; Se > 'z', non è m
+                                                            inuscolo
+  377 00000144 DC02            BGT              skip_upper
+  378 00000146         
+  379 00000146 F1A2 0220       SUB              r2, r2, #32 ; Converti: 'a'(97)
+                                                             - 32 = 'A'(65)
+  380 0000014A 700A            STRB             r2, [r1]    ; Scrivi indietro
+  381 0000014C         
+  382 0000014C F101 0101 
+                       skip_upper
+                               ADD              r1, r1, #1  ; Next char
+  383 00000150 E7F2            B                loop_upper
+  384 00000152         
+  385 00000152 BD10    end_upper
+                               POP              {r4, pc}
+  386 00000154                 ENDP
+  387 00000154         
+  388 00000154         ; ------------------------------------------------------
+                       ----------------------
+  389 00000154         ; Function: count_set_bits
+  390 00000154         ; Descrizione: Conta i bit a '1' in una word (Population
+                        Count).
+  391 00000154         ; Input:  R0 = Valore
+  392 00000154         ; Output: R0 = Numero bit a 1
+  393 00000154         ; ------------------------------------------------------
+                       ----------------------
+  394 00000154                 EXPORT           count_set_bits
+  395 00000154         count_set_bits
+                               PROC
+  396 00000154 B510            PUSH             {r4, lr}
+
+
+
+ARM Macro Assembler    Page 10 
+
+
+  397 00000156 4601            MOV              r1, r0
+  398 00000158 F04F 0000       MOV              r0, #0      ; Counter
+  399 0000015C         
+  400 0000015C 2900    loop_bits
+                               CMP              r1, #0
+  401 0000015E D006            BEQ              end_bits
+  402 00000160         
+  403 00000160 F011 0F01       TST              r1, #1      ; Test LSB
+  404 00000164 BF18 1C40       ADDNE            r0, r0, #1  ; Se 1, incrementa
+  405 00000168 EA4F 0151       LSR              r1, r1, #1  ; Shift destra
+  406 0000016C E7F6            B                loop_bits
+  407 0000016E         
+  408 0000016E BD10    end_bits
+                               POP              {r4, pc}
+  409 00000170                 ENDP
+  410 00000170         
+  411 00000170         ; ------------------------------------------------------
+                       ----------------------
+  412 00000170         ; Function: check_palindrome
+  413 00000170         ; Descrizione: Verifica se una stringa è palindroma.
+  414 00000170         ; Input:  R0 = Stringa, R1 = Lunghezza
+  415 00000170         ; Output: R0 = 1 (Vero), 0 (Falso)
+  416 00000170         ; ------------------------------------------------------
+                       ----------------------
+  417 00000170                 EXPORT           check_palindrome
+  418 00000170         check_palindrome
+                               PROC
+  419 00000170 B570            PUSH             {r4-r6, lr}
+  420 00000172 EB00 0201       ADD              r2, r0, r1
+  421 00000176 F1A2 0201       SUB              r2, r2, #1  ; R2 = Puntatore fi
+                                                            ne
+  422 0000017A         
+  423 0000017A 4290    loop_pal
+                               CMP              r0, r2      ; Incrociato?
+  424 0000017C DA06            BGE              is_pal
+  425 0000017E         
+  426 0000017E F810 3B01       LDRB             r3, [r0], #1 ; Carica Head e av
+                                                            anza
+  427 00000182 F812 4901       LDRB             r4, [r2], #-1 ; Carica Tail e a
+                                                            rretra
+  428 00000186         
+  429 00000186 42A3            CMP              r3, r4
+  430 00000188 D103            BNE              not_pal
+  431 0000018A E7F6            B                loop_pal
+  432 0000018C         
+  433 0000018C F04F 0001 
+                       is_pal  MOV              r0, #1
+  434 00000190 E001            B                end_pal
+  435 00000192 F04F 0000 
+                       not_pal MOV              r0, #0
+  436 00000196         
+  437 00000196 BD70    end_pal POP              {r4-r6, pc}
+  438 00000198                 ENDP
+  439 00000198         
+  440 00000198         ; ------------------------------------------------------
+                       ----------------------
+  441 00000198         ; Function: factorial_recursive
+  442 00000198         ; Descrizione: Fattoriale ricorsivo N!
+  443 00000198         ; Input:  R0 = N
+
+
+
+ARM Macro Assembler    Page 11 
+
+
+  444 00000198         ; Output: R0 = Risultato
+  445 00000198         ; ------------------------------------------------------
+                       ----------------------
+  446 00000198                 EXPORT           factorial_recursive
+  447 00000198         factorial_recursive
+                               PROC
+  448 00000198 B510            PUSH             {r4, lr}
+  449 0000019A 2801            CMP              r0, #1
+  450 0000019C DD07            BLE              base_fact   ; Base case <= 1
+  451 0000019E         
+  452 0000019E 4604            MOV              r4, r0      ; Salva N
+  453 000001A0 F1A0 0001       SUB              r0, r0, #1  ; N-1
+  454 000001A4 F7FF FFFE       BL               factorial_recursive
+  455 000001A8 FB04 F000       MUL              r0, r4, r0  ; N * Fact(N-1)
+  456 000001AC E001            B                end_fact
+  457 000001AE         
+  458 000001AE F04F 0001 
+                       base_fact
+                               MOV              r0, #1
+  459 000001B2 BD10    end_fact
+                               POP              {r4, pc}
+  460 000001B4                 ENDP
+  461 000001B4         
+  462 000001B4         ; ------------------------------------------------------
+                       ----------------------
+  463 000001B4         ; Function: my_atoi
+  464 000001B4         ; Descrizione: Stringa ASCII -> Intero ("123" -> 123)
+  465 000001B4         ; Input:  R0 = Stringa
+  466 000001B4         ; Output: R0 = Intero
+  467 000001B4         ; ------------------------------------------------------
+                       ----------------------
+  468 000001B4                 EXPORT           my_atoi
+  469 000001B4         my_atoi PROC
+  470 000001B4 B530            PUSH             {r4, r5, lr}
+  471 000001B6 4601            MOV              r1, r0
+  472 000001B8 F04F 0000       MOV              r0, #0      ; Accumulatore
+  473 000001BC F04F 030A       MOV              r3, #10     ; Base
+  474 000001C0         
+  475 000001C0 F811 2B01 
+                       loop_atoi
+                               LDRB             r2, [r1], #1
+  476 000001C4 2A00            CMP              r2, #0
+  477 000001C6 D007            BEQ              end_atoi
+  478 000001C8         
+  479 000001C8 F1A2 0230       SUB              r2, r2, #'0' ; ASCII to Int
+  480 000001CC 2A09            CMP              r2, #9
+  481 000001CE D803            BHI              end_atoi    ; Se non è cifra, s
+                                                            top
+  482 000001D0         
+  483 000001D0 FB00 F003       MUL              r0, r0, r3  ; Acc * 10
+  484 000001D4 4410            ADD              r0, r0, r2  ; Acc + Cifra
+  485 000001D6 E7F3            B                loop_atoi
+  486 000001D8         
+  487 000001D8 BD30    end_atoi
+                               POP              {r4, r5, pc}
+  488 000001DA                 ENDP
+  489 000001DA         
+  490 000001DA         ; ------------------------------------------------------
+                       ----------------------
+
+
+
+ARM Macro Assembler    Page 12 
+
+
+  491 000001DA         ; Function: next_state (LSFR)
+  492 000001DA         ; Descrizione: Linear Feedback Shift Register step.
+  493 000001DA         ; Input:  R0 = State, R1 = Taps, R2 = *OutputBit
+  494 000001DA         ; Output: R0 = New State
+  495 000001DA         ; ------------------------------------------------------
+                       ----------------------
+  496 000001DA                 EXPORT           next_state
+  497 000001DA         next_state
+                               PROC
+  498 000001DA E92D 4DF0       PUSH             {R4-R8, R10-R11, LR}
+  499 000001DE         
+  500 000001DE         ; *output_bit = current_state & 1
+  501 000001DE F000 0301       AND              R3, R0, #1
+  502 000001E2 6013            STR              R3, [R2]
+  503 000001E4         
+  504 000001E4 4606            MOV              R6, R0      ; Copia stato
+  505 000001E6 F04F 0700       MOV              R7, #0      ; Input bit
+  506 000001EA F04F 0400       MOV              R4, #0      ; i loop
+  507 000001EE F04F 0501       MOV              R5, #1      ; Maschera
+  508 000001F2         
+  509 000001F2 2C08    loop_lsfr
+                               CMP              R4, #8
+  510 000001F4 D00A            BEQ              loop_lsfr_end
+  511 000001F6         
+  512 000001F6 4229            TST              R1, R5      ; Tap attivo?
+  513 000001F8 BF1C FA26 
+              F804             LSRNE            R8, R6, R4
+  514 000001FE EA87 0708       EORNE            R7, R7, R8  ; XOR accumulo
+  515 00000202         
+  516 00000202 EA4F 0545       LSL              R5, R5, #1
+  517 00000206 F104 0401       ADD              R4, R4, #1
+  518 0000020A E7F2            B                loop_lsfr
+  519 0000020C         
+  520 0000020C         loop_lsfr_end
+  521 0000020C F007 0701       AND              R7, R7, #1  ; LSB solo
+  522 00000210 EA4F 0050       LSR              R0, R0, #1  ; Shift stato
+  523 00000214 EA4F 17C7       LSL              R7, R7, #7  ; Input bit MSB
+  524 00000218 EA40 0007       ORR              R0, R0, R7  ; Combina
+  525 0000021C         
+  526 0000021C E8BD 8DF0       POP              {R4-R8, R10-R11, PC}
+  527 00000220                 ENDP
+  528 00000220         
+  529 00000220         ; ------------------------------------------------------
+                       -------------
+  530 00000220         ; Conta i bit a 1 (Brian Kernighan)
+  531 00000220         ; Input:  R0 = numero
+  532 00000220         ; Output: R0 = numero di bit a 1
+  533 00000220         ; ------------------------------------------------------
+                       -------------
+  534 00000220                 EXPORT           brianKernighan
+  535 00000220         brianKernighan
+                               PROC
+  536 00000220 B530            STMFD            sp!, {r4-r5, lr}
+  537 00000222 F04F 0400       MOV              r4, #0      ; counter
+  538 00000226         loopBK
+  539 00000226 2800            CMP              r0, #0
+  540 00000228 D006            BEQ              endBK
+  541 0000022A F1A0 0501       SUB              r5, r0, #1
+  542 0000022E EA00 0005       AND              r0, r0, r5
+
+
+
+ARM Macro Assembler    Page 13 
+
+
+  543 00000232 F104 0401       ADD              r4, r4, #1
+  544 00000236 E7F6            B                loopBK
+  545 00000238 4620    endBK   MOV              r0, r4
+  546 0000023A BD30            LDMFD            sp!, {r4-r5, pc}
+  547 0000023C                 ENDP
+  548 0000023C         
+  549 0000023C         ; ------------------------------------------------------
+                       -------------
+  550 0000023C         ; Conta leading zeros
+  551 0000023C         ; Input:  R0 = numero
+  552 0000023C         ; Output: R0 = numero di zeri iniziali
+  553 0000023C         ; ------------------------------------------------------
+                       -------------
+  554 0000023C                 EXPORT           count_leading_zero
+  555 0000023C         count_leading_zero
+                               PROC
+  556 0000023C E92D 4DF0       STMFD            sp!, {r4-r8, r10-r11, lr}
+  557 00000240 FAB0 F080       CLZ              R0, R0
+  558 00000244 E8BD 8DF0       LDMFD            sp!, {r4-r8, r10-r11, pc}
+  559 00000248                 ENDP
+  560 00000248         
+  561 00000248         ; ------------------------------------------------------
+                       -------------
+  562 00000248         ; Massimo / Minimo di un array
+  563 00000248         ; Input:  R0 = puntatore array, R1 = dimensione (numero 
+                       elementi)
+  564 00000248         ; Output: R0 = massimo o minimo
+  565 00000248         ; ------------------------------------------------------
+                       -------------
+  566 00000248                 EXPORT           get_max
+  567 00000248         get_max PROC
+  568 00000248 E92D 4DF0       STMFD            sp!, {r4-r8,r10-r11, lr}
+  569 0000024C F850 6B04       LDR              R6, [R0], #4
+  570 00000250 1E49            SUBS             R1, R1, #1
+  571 00000252 DD06            BLE              exitMax
+  572 00000254         loopMax
+  573 00000254 F850 4B04       LDR              R4, [R0], #4
+  574 00000258 42B4            CMP              R4, R6
+  575 0000025A BFC8 4626       MOVGT            R6, R4
+  576 0000025E 1E49            SUBS             R1, R1, #1
+  577 00000260 DCF8            BGT              loopMax
+  578 00000262 4630    exitMax MOV              R0, R6
+  579 00000264 E8BD 8DF0       LDMFD            sp!, {r4-r8,r10-r11, pc}
+  580 00000268                 ENDP
+  581 00000268         
+  582 00000268                 EXPORT           get_min
+  583 00000268         get_min PROC
+  584 00000268 E92D 4DF0       STMFD            sp!, {r4-r8,r10-r11, lr}
+  585 0000026C F850 6B04       LDR              R6, [R0], #4
+  586 00000270 1E49            SUBS             R1, R1, #1
+  587 00000272 DD06            BLE              exitMin
+  588 00000274         loopMin
+  589 00000274 F850 4B04       LDR              R4, [R0], #4
+  590 00000278 42B4            CMP              R4, R6
+  591 0000027A BFB8 4626       MOVLT            R6, R4
+  592 0000027E 1E49            SUBS             R1, R1, #1
+  593 00000280 DCF8            BGT              loopMin
+  594 00000282 4630    exitMin MOV              R0, R6
+  595 00000284 E8BD 8DF0       LDMFD            sp!, {r4-r8,r10-r11, pc}
+
+
+
+ARM Macro Assembler    Page 14 
+
+
+  596 00000288                 ENDP
+  597 00000288         
+  598 00000288         ; ------------------------------------------------------
+                       -------------
+  599 00000288         ; Verifica se array è monotono crescente
+  600 00000288         ; Input: R0 = puntatore array, R1 = dimensione
+  601 00000288         ; Output: R0 = 1 se vero, 0 se falso
+  602 00000288         ; ------------------------------------------------------
+                       -------------
+  603 00000288                 EXPORT           is_monotonic_increasing
+  604 00000288         is_monotonic_increasing
+                               PROC
+  605 00000288 E92D 4DF0       STMFD            sp!,{r4-r8,r10-r11, lr}
+  606 0000028C 2901            CMP              R1, #1
+  607 0000028E DD0B            BLE              exitTrue
+  608 00000290 F850 4B04       LDR              R4, [R0], #4
+  609 00000294 1E49            SUBS             R1, R1, #1
+  610 00000296         loopCheck
+  611 00000296 F850 5B04       LDR              R5, [R0], #4
+  612 0000029A 42AC            CMP              R4, R5
+  613 0000029C BFC8 2000       MOVGT            R0, #0
+  614 000002A0 DC05            BGT              exitFalse
+  615 000002A2 462C            MOV              R4, R5
+  616 000002A4 1E49            SUBS             R1, R1, #1
+  617 000002A6 DCF6            BGT              loopCheck
+  618 000002A8 F04F 0001 
+                       exitTrue
+                               MOV              R0, #1
+  619 000002AC E001            B                endFunc
+  620 000002AE F04F 0000 
+                       exitFalse
+                               MOV              R0, #0
+  621 000002B2 E8BD 8DF0 
+                       endFunc LDMFD            sp!,{r4-r8,r10-r11, pc}
+  622 000002B6                 ENDP
+  623 000002B6         
+  624 000002B6         ; ------------------------------------------------------
+                       -------------
+  625 000002B6         ; Complemento a 2 di 32-bit
+  626 000002B6         ; Input:  R0 = numero
+  627 000002B6         ; Output: R0 = complemento a 2
+  628 000002B6         ; ------------------------------------------------------
+                       -------------
+  629 000002B6                 EXPORT           do_2_complement
+  630 000002B6         do_2_complement
+                               PROC
+  631 000002B6 E92D 4DF0       STMFD            sp!,{r4-r8,r10-r11,lr}
+  632 000002BA EA6F 0000       MVN              R0, R0
+  633 000002BE F100 0001       ADD              R0, R0, #1
+  634 000002C2 E8BD 8DF0       LDMFD            sp!,{r4-r8,r10-r11,pc}
+  635 000002C6                 ENDP
+  636 000002C6         
+  637 000002C6         ; ------------------------------------------------------
+                       -------------
+  638 000002C6         ; Complemento a 2 di 64-bit
+  639 000002C6         ; Input:  R0 = upper, R1 = lower
+  640 000002C6         ; Output: R0,R1 = risultato
+  641 000002C6         ; ------------------------------------------------------
+                       -------------
+
+
+
+ARM Macro Assembler    Page 15 
+
+
+  642 000002C6                 EXPORT           do_2_complement_64
+  643 000002C6         do_2_complement_64
+                               PROC
+  644 000002C6 E92D 4DF0       STMFD            sp!,{r4-r8,r10-r11,lr}
+  645 000002CA EA6F 0000       MVN              R0, R0
+  646 000002CE EA6F 0101       MVN              R1, R1
+  647 000002D2 1C49            ADDS             R1, R1, #1
+  648 000002D4 D701            BVC              noOverflow
+  649 000002D6 F100 0001       ADD              R0, R0, #1
+  650 000002DA E8BD 8DF0 
+                       noOverflow
+                               LDMFD            sp!,{r4-r8,r10-r11,pc}
+  651 000002DE                 ENDP
+  652 000002DE         
+  653 000002DE         ; ------------------------------------------------------
+                       -------------
+  654 000002DE         ; Verifica se un valore è in un intervallo
+  655 000002DE         ; Input: R0 = valore, R1 = min, R2 = max
+  656 000002DE         ; Output: R0 = 1 se in range, 0 altrimenti
+  657 000002DE         ; ------------------------------------------------------
+                       -------------
+  658 000002DE                 EXPORT           value_is_in_a_range
+  659 000002DE         value_is_in_a_range
+                               PROC
+  660 000002DE E92D 4DF0       STMFD            sp!,{r4-r8,r10-r11, lr}
+  661 000002E2 4288            CMP              R0, R1
+  662 000002E4 D304            BLO              outOfRange
+  663 000002E6 4290            CMP              R0, R2
+  664 000002E8 D802            BHI              outOfRange
+  665 000002EA F04F 0001       MOV              R0, #1
+  666 000002EE E001            B                exitFuncV
+  667 000002F0         outOfRange
+  668 000002F0 F04F 0000       MOV              R0, #0
+  669 000002F4         exitFuncV
+  670 000002F4 E8BD 8DF0       LDMFD            sp!,{r4-r8,r10-r11,pc}
+  671 000002F8                 ENDP
+  672 000002F8         
+  673 000002F8         ; ------------------------------------------------------
+                       -------------
+  674 000002F8         ; Controllo carattere minuscolo
+  675 000002F8         ; Input: R0 = ASCII char
+  676 000002F8         ; Output: R0 = 1 se minuscolo, 0 altrimenti
+  677 000002F8         ; ------------------------------------------------------
+                       -------------
+  678 000002F8                 EXPORT           check_lowerCase
+  679 000002F8         check_lowerCase
+                               PROC
+  680 000002F8 E92D 4DF0       STMFD            sp!,{r4-r8,r10-r11,lr}
+  681 000002FC 2861            CMP              R0, #'a'
+  682 000002FE DB04            BLT              nope
+  683 00000300 287A            CMP              R0, #'z'
+  684 00000302 DC02            BGT              nope
+  685 00000304 F04F 0001       MOV              R0, #1
+  686 00000308 4770            BX               lr
+  687 0000030A F04F 0000 
+                       nope    MOV              R0, #0
+  688 0000030E E8BD 8DF0       LDMFD            sp!,{r4-r8,r10-r11,pc}
+  689 00000312                 ENDP
+  690 00000312         
+
+
+
+ARM Macro Assembler    Page 16 
+
+
+  691 00000312         ; ------------------------------------------------------
+                       -------------
+  692 00000312         ; Controllo carattere maiuscolo
+  693 00000312         ; Input: R0 = ASCII char
+  694 00000312         ; Output: R0 = 1 se maiuscolo, 0 altrimenti
+  695 00000312         ; ------------------------------------------------------
+                       -------------
+  696 00000312                 EXPORT           check_upperCase
+  697 00000312         check_upperCase
+                               PROC
+  698 00000312 E92D 4DF0       STMFD            sp!,{r4-r8,r10-r11,lr}
+  699 00000316 2841            CMP              R0, #'A'
+  700 00000318 DB04            BLT              nope2
+  701 0000031A 285A            CMP              R0, #'Z'
+  702 0000031C DC02            BGT              nope2
+  703 0000031E F04F 0001       MOV              R0, #1
+  704 00000322 4770            BX               lr
+  705 00000324 F04F 0000 
+                       nope2   MOV              R0, #0
+  706 00000328 E8BD 8DF0       LDMFD            sp!,{r4-r8,r10-r11,pc}
+  707 0000032C                 ENDP
+  708 0000032C         
+  709 0000032C         ; ------------------------------------------------------
+                       -------------
+  710 0000032C         ; Somma di tutti gli elementi dell'array
+  711 0000032C         ; Input:  R0 = puntatore array, R1 = numero elementi
+  712 0000032C         ; Output: R0 = somma
+  713 0000032C         ; ------------------------------------------------------
+                       -------------
+  714 0000032C                 EXPORT           array_sum
+  715 0000032C         array_sum
+                               PROC
+  716 0000032C E92D 41F0       STMFD            sp!, {r4-r8, lr}
+  717 00000330         
+  718 00000330 F04F 0200       MOV              R2, #0      ; somma totale
+  719 00000334 F04F 0300       MOV              R3, #0      ; indice
+  720 00000338         
+  721 00000338         loop_sum
+  722 00000338 428B            CMP              R3, R1
+  723 0000033A DA05            BGE              exit_sum
+  724 0000033C F850 4023       LDR              R4, [R0, R3, LSL #2]
+  725 00000340 4422            ADD              R2, R2, R4
+  726 00000342 F103 0301       ADD              R3, R3, #1
+  727 00000346 E7F7            B                loop_sum
+  728 00000348         
+  729 00000348         exit_sum
+  730 00000348 4610            MOV              R0, R2
+  731 0000034A E8BD 81F0       LDMFD            sp!, {r4-r8, pc}
+  732 0000034E                 ENDP
+  733 0000034E         
+  734 0000034E         ; ------------------------------------------------------
+                       -------------
+  735 0000034E         ; Media (average) di tutti gli elementi dell'array
+  736 0000034E         ; Input:  R0 = puntatore array, R1 = numero elementi
+  737 0000034E         ; Output: R0 = media (intera, divisione intera)
+  738 0000034E         ; ------------------------------------------------------
+                       -------------
+  739 0000034E                 EXPORT           array_average
+  740 0000034E         array_average
+
+
+
+ARM Macro Assembler    Page 17 
+
+
+                               PROC
+  741 0000034E E92D 41F0       STMFD            sp!, {r4-r8, lr}
+  742 00000352         
+  743 00000352 2900            CMP              R1, #0
+  744 00000354 D00F            BEQ              zero_avg    ; protezione divisi
+                                                            one per zero
+  745 00000356         
+  746 00000356 F04F 0200       MOV              R2, #0      ; somma totale (acc
+                                                            umulatore)
+  747 0000035A F04F 0300       MOV              R3, #0      ; indice i = 0
+  748 0000035E         
+  749 0000035E         loop_avg
+  750 0000035E 428B            CMP              R3, R1
+  751 00000360 DA05            BGE              exit_avg
+  752 00000362 F850 4023       LDR              R4, [R0, R3, LSL #2] ; Carica a
+                                                            rray[i] (word = 4 b
+                                                            yte, LSL #2)
+  753 00000366 4422            ADD              R2, R2, R4  ; somma += valore
+  754 00000368 F103 0301       ADD              R3, R3, #1  ; i++
+  755 0000036C E7F7            B                loop_avg
+  756 0000036E         
+  757 0000036E         exit_avg
+  758 0000036E         ; Utilizzo della divisione hardware del Cortex-M3
+  759 0000036E         ; Sintassi: UDIV Rd, Rn, Rm  -> Rd = Rn / Rm
+  760 0000036E FBB2 F0F1       UDIV             R0, R2, R1  ; R0 = Somma (R2) /
+                                                             Num_Elementi (R1)
+  761 00000372 E8BD 81F0       LDMFD            sp!, {r4-r8, pc}
+  762 00000376         
+  763 00000376         zero_avg
+  764 00000376 F04F 0000       MOV              R0, #0
+  765 0000037A E8BD 81F0       LDMFD            sp!, {r4-r8, pc}
+  766 0000037E                 ENDP
+  767 0000037E         
+  768 0000037E         ; ------------------------------------------------------
+                       -------------
+  769 0000037E         ; Massimo dell'array
+  770 0000037E         ; Input: R0 = puntatore array, R1 = dimensione
+  771 0000037E         ; Output: R0 = massimo
+  772 0000037E         ; ------------------------------------------------------
+                       -------------
+  773 0000037E                 EXPORT           get_max_1
+  774 0000037E         get_max_1
+                               PROC
+  775 0000037E E92D 4DF0       STMFD            sp!, {r4-r8,r10-r11, lr}
+  776 00000382 F850 6B04       LDR              R6, [R0], #4
+  777 00000386 1E49            SUBS             R1, R1, #1
+  778 00000388 DD06            BLE              exitMax_1
+  779 0000038A         loopMax_1
+  780 0000038A F850 4B04       LDR              R4, [R0], #4
+  781 0000038E 42B4            CMP              R4, R6
+  782 00000390 BFC8 4626       MOVGT            R6, R4
+  783 00000394 1E49            SUBS             R1, R1, #1
+  784 00000396 DCF8            BGT              loopMax_1
+  785 00000398 4630    exitMax_1
+                               MOV              R0, R6
+  786 0000039A E8BD 8DF0       LDMFD            sp!, {r4-r8,r10-r11, pc}
+  787 0000039E                 ENDP
+  788 0000039E         
+  789 0000039E         ; ------------------------------------------------------
+
+
+
+ARM Macro Assembler    Page 18 
+
+
+                       -------------
+  790 0000039E         ; Minimo dell'array
+  791 0000039E         ; Input: R0 = puntatore array, R1 = dimensione
+  792 0000039E         ; Output: R0 = minimo
+  793 0000039E         ; ------------------------------------------------------
+                       -------------
+  794 0000039E                 EXPORT           get_min_1
+  795 0000039E         get_min_1
+                               PROC
+  796 0000039E E92D 4DF0       STMFD            sp!, {r4-r8,r10-r11, lr}
+  797 000003A2 F850 6B04       LDR              R6, [R0], #4
+  798 000003A6 1E49            SUBS             R1, R1, #1
+  799 000003A8 DD06            BLE              exitMin_1
+  800 000003AA         loopMin_1
+  801 000003AA F850 4B04       LDR              R4, [R0], #4
+  802 000003AE 42B4            CMP              R4, R6
+  803 000003B0 BFB8 4626       MOVLT            R6, R4
+  804 000003B4 1E49            SUBS             R1, R1, #1
+  805 000003B6 DCF8            BGT              loopMin_1
+  806 000003B8 4630    exitMin_1
+                               MOV              R0, R6
+  807 000003BA E8BD 8DF0       LDMFD            sp!, {r4-r8,r10-r11, pc}
+  808 000003BE                 ENDP
+  809 000003BE         
+  810 000003BE         ; ------------------------------------------------------
+                       -------------
+  811 000003BE         ; Verifica se array è monotono crescente
+  812 000003BE         ; Input: R0 = puntatore array, R1 = dimensione
+  813 000003BE         ; Output: R0 = 1 se vero, 0 se falso
+  814 000003BE         ; ------------------------------------------------------
+                       -------------
+  815 000003BE                 EXPORT           is_monotonic_increasing_1
+  816 000003BE         is_monotonic_increasing_1
+                               PROC
+  817 000003BE E92D 4DF0       STMFD            sp!,{r4-r8,r10-r11, lr}
+  818 000003C2 2901            CMP              R1, #1
+  819 000003C4 DD0C            BLE              exitTrue_1
+  820 000003C6 F850 4B04       LDR              R4, [R0], #4
+  821 000003CA 1E49            SUBS             R1, R1, #1
+  822 000003CC         loopCheck_1
+  823 000003CC F850 5B04       LDR              R5, [R0], #4
+  824 000003D0 42AC            CMP              R4, R5
+  825 000003D2 BFC8 2000       MOVGT            R0, #0
+  826 000003D6 DC06            BGT              exitFalse_1
+  827 000003D8 462C            MOV              R4, R5
+  828 000003DA 1E49            SUBS             R1, R1, #1
+  829 000003DC F73F AF5B       BGT              loopCheck
+  830 000003E0 F04F 0001 
+                       exitTrue_1
+                               MOV              R0, #1
+  831 000003E4 E001            B                endFunc_1
+  832 000003E6 F04F 0000 
+                       exitFalse_1
+                               MOV              R0, #0
+  833 000003EA E8BD 8DF0 
+                       endFunc_1
+                               LDMFD            sp!,{r4-r8,r10-r11, pc}
+  834 000003EE                 ENDP
+  835 000003EE         
+
+
+
+ARM Macro Assembler    Page 19 
+
+
+  836 000003EE         ; ------------------------------------------------------
+                       -------------
+  837 000003EE         ; Conta bit a 1 di tutti gli elementi dell'array
+  838 000003EE         ; Input: R0 = puntatore array, R1 = dimensione
+  839 000003EE         ; Output: R0 = numero totale di bit a 1
+  840 000003EE         ; ------------------------------------------------------
+                       -------------
+  841 000003EE                 EXPORT           array_count_bit1
+  842 000003EE         array_count_bit1
+                               PROC
+  843 000003EE E92D 41F0       STMFD            sp!,{r4-r8, lr}
+  844 000003F2 F04F 0200       MOV              R2, #0      ; totale bit a 1
+  845 000003F6 F04F 0300       MOV              R3, #0      ; indice
+  846 000003FA         loop_count
+  847 000003FA 428B            CMP              R3, R1
+  848 000003FC DA08            BGE              exit_count
+  849 000003FE F850 4023       LDR              R4, [R0, R3, LSL #2]
+  850 00000402 4620            MOV              R0, R4
+  851 00000404 F7FF FFFE       BL               brianKernighan
+  852 00000408 4402            ADD              R2, R2, R0
+  853 0000040A F103 0301       ADD              R3, R3, #1
+  854 0000040E E7F4            B                loop_count
+  855 00000410         exit_count
+  856 00000410 4610            MOV              R0, R2
+  857 00000412 E8BD 81F0       LDMFD            sp!,{r4-r8, pc}
+  858 00000416                 ENDP
+  859 00000416         
+  860 00000416         ; ------------------------------------------------------
+                       ----------------------
+  861 00000416         ; Controllo se numero primo
+  862 00000416         ; Input: R0 = numero
+  863 00000416         ; Output: R0 = 1 se primo, 0 altrimenti
+  864 00000416         ; ------------------------------------------------------
+                       ----------------------
+  865 00000416                 EXPORT           is_prime
+  866 00000416         is_prime
+                               PROC
+  867 00000416 B5F0            STMFD            sp!, {r4-r7, lr}
+  868 00000418 2802            CMP              R0, #2
+  869 0000041A DB11            BLT              not_prime   ; 0,1 non sono prim
+                                                            i
+  870 0000041C F04F 0102       MOV              R1, #2      ; divisore iniziale
+                                                            
+  871 00000420         loop_prime
+  872 00000420 FB01 F201       MUL              R2, R1, R1
+  873 00000424 4282            CMP              R2, R0
+  874 00000426 DC08            BGT              prime_yes   ; se R1*R1 > N, è p
+                                                            rimo
+  875 00000428 FBB0 F3F1       UDIV             R3, R0, R1
+  876 0000042C FB03 F301       MUL              R3, R3, R1
+  877 00000430 4283            CMP              R3, R0
+  878 00000432 D005            BEQ              not_prime   ; divisibile, non p
+                                                            rimo
+  879 00000434 F101 0101       ADD              R1, R1, #1
+  880 00000438 E7F2            B                loop_prime
+  881 0000043A         prime_yes
+  882 0000043A F04F 0001       MOV              R0, #1
+  883 0000043E E001            B                end_prime
+  884 00000440         not_prime
+
+
+
+ARM Macro Assembler    Page 20 
+
+
+  885 00000440 F04F 0000       MOV              R0, #0
+  886 00000444         end_prime
+  887 00000444 BDF0            LDMFD            sp!, {r4-r7, pc}
+  888 00000446                 ENDP
+  889 00000446         
+  890 00000446         ; ------------------------------------------------------
+                       ----------------------
+  891 00000446         ; MCD (Euclide)
+  892 00000446         ; Input: R0 = A, R1 = B
+  893 00000446         ; Output: R0 = MCD
+  894 00000446         ; ------------------------------------------------------
+                       ----------------------
+  895 00000446                 EXPORT           gcd
+  896 00000446         gcd     PROC
+  897 00000446 B5F0            STMFD            sp!, {r4-r7, lr}
+  898 00000448         loop_gcd
+  899 00000448 2900            CMP              R1, #0
+  900 0000044A D00A            BEQ              end_gcd
+  901 0000044C 4602            MOV              R2, R0
+  902 0000044E FBB0 F3F1       UDIV             R3, R0, R1
+  903 00000452 FB03 F301       MUL              R3, R3, R1
+  904 00000456 EBA2 0003       SUB              R0, R2, R3  ; R0 = A mod B
+  905 0000045A 4602            MOV              R2, R0
+  906 0000045C 4608            MOV              R0, R1
+  907 0000045E 4611            MOV              R1, R2
+  908 00000460 E7F2            B                loop_gcd
+  909 00000462         end_gcd
+  910 00000462 BDF0            LDMFD            sp!, {r4-r7, pc}
+  911 00000464                 ENDP
+  912 00000464         
+  913 00000464         ; ------------------------------------------------------
+                       ----------------------
+  914 00000464         ; MCM (Minimo comune multiplo)
+  915 00000464         ; Input: R0 = A, R1 = B
+  916 00000464         ; Output: R0 = MCM
+  917 00000464         ; ------------------------------------------------------
+                       ----------------------
+  918 00000464                 EXPORT           lcm
+  919 00000464         lcm     PROC
+  920 00000464 B5F0            STMFD            sp!, {r4-r7, lr}
+  921 00000466 4602            MOV              R2, R0      ; Salva A
+  922 00000468 460B            MOV              R3, R1      ; Salva B
+  923 0000046A F7FF FFFE       BL               gcd         ; R0 = MCD(A,B)
+  924 0000046E         ; MCM = (A*B)/MCD
+  925 0000046E FB02 F003       MUL              R0, R2, R3
+  926 00000472 FBB0 F0F0       UDIV             R0, R0, R0  ; R0 = (A*B)/MCD
+  927 00000476 BDF0            LDMFD            sp!, {r4-r7, pc}
+  928 00000478                 ENDP
+  929 00000478         
+  930 00000478         ; ------------------------------------------------------
+                       ----------------------
+  931 00000478         ; Potenza intera
+  932 00000478         ; Input: R0 = base, R1 = esponente
+  933 00000478         ; Output: R0 = base^esponente
+  934 00000478         ; ------------------------------------------------------
+                       ----------------------
+  935 00000478                 EXPORT           int_power
+  936 00000478         int_power
+                               PROC
+
+
+
+ARM Macro Assembler    Page 21 
+
+
+  937 00000478 B5F0            STMFD            sp!, {r4-r7, lr}
+  938 0000047A F04F 0201       MOV              R2, #1      ; Accumulatore risu
+                                                            ltato
+  939 0000047E 2900            CMP              R1, #0
+  940 00000480 D003            BEQ              end_power
+  941 00000482         loop_power
+  942 00000482 FB02 F200       MUL              R2, R2, R0
+  943 00000486 1E49            SUBS             R1, R1, #1
+  944 00000488 DCFB            BGT              loop_power
+  945 0000048A         end_power
+  946 0000048A 4610            MOV              R0, R2
+  947 0000048C BDF0            LDMFD            sp!, {r4-r7, pc}
+  948 0000048E                 ENDP
+  949 0000048E         
+  950 0000048E         ; ------------------------------------------------------
+                       ----------------------
+  951 0000048E         ; Verifica numero pari / dispari
+  952 0000048E         ; Input: R0 = numero
+  953 0000048E         ; Output: R0 = 1 se pari, 0 se dispari
+  954 0000048E         ; ------------------------------------------------------
+                       ----------------------
+  955 0000048E                 EXPORT           is_even
+  956 0000048E         is_even PROC
+  957 0000048E B5F0            STMFD            sp!, {r4-r7, lr}
+  958 00000490 F000 0101       AND              R1, R0, #1
+  959 00000494 2900            CMP              R1, #0
+  960 00000496 BF0C 2001       MOVEQ            R0, #1
+  961 0000049A 2000            MOVNE            R0, #0
+  962 0000049C BDF0            LDMFD            sp!, {r4-r7, pc}
+  963 0000049E                 ENDP
+  964 0000049E         
+  965 0000049E         ; ------------------------------------------------------
+                       ----------------------
+  966 0000049E         ; Array find (ritorna indice primo match)
+  967 0000049E         ; Input: R0 = puntatore array (word), R1 = dimensione, R
+                       2 = valore da cercare
+  968 0000049E         ; Output: R0 = indice se trovato, 0xFFFFFFFF se non trov
+                       ato
+  969 0000049E         ; ------------------------------------------------------
+                       ----------------------
+  970 0000049E                 EXPORT           array_find
+  971 0000049E         array_find
+                               PROC
+  972 0000049E B5F0            STMFD            sp!, {r4-r7, lr}
+  973 000004A0 F04F 0300       MOV              R3, #0      ; indice
+  974 000004A4         loop_find
+  975 000004A4 428B            CMP              R3, R1
+  976 000004A6 DA08            BGE              not_found
+  977 000004A8 F850 4023       LDR              R4, [R0, R3, LSL #2]
+  978 000004AC 4294            CMP              R4, R2
+  979 000004AE D002            BEQ              found
+  980 000004B0 F103 0301       ADD              R3, R3, #1
+  981 000004B4 E7F6            B                loop_find
+  982 000004B6         found
+  983 000004B6 4618            MOV              R0, R3
+  984 000004B8 E001            B                end_find
+  985 000004BA         not_found
+  986 000004BA F04F 30FF       MOV              R0, #0xFFFFFFFF
+  987 000004BE         end_find
+
+
+
+ARM Macro Assembler    Page 22 
+
+
+  988 000004BE BDF0            LDMFD            sp!, {r4-r7, pc}
+  989 000004C0                 ENDP
+  990 000004C0         
+  991 000004C0         ; ------------------------------------------------------
+                       ----------------------
+  992 000004C0         ; Array reverse (in-place)
+  993 000004C0         ; Input: R0 = puntatore array (word), R1 = dimensione
+  994 000004C0         ; Output: nessuno, modifica array in-place
+  995 000004C0         ; ------------------------------------------------------
+                       ----------------------
+  996 000004C0                 EXPORT           array_reverse
+  997 000004C0         array_reverse
+                               PROC
+  998 000004C0 B5F0            STMFD            sp!, {r4-r7, lr}
+  999 000004C2 F04F 0200       MOV              R2, #0      ; i = 0
+ 1000 000004C6 F1A1 0301       SUB              R3, R1, #1  ; j = N-1
+ 1001 000004CA         loop_rev
+ 1002 000004CA 429A            CMP              R2, R3
+ 1003 000004CC DA0C            BGE              end_reverse
+ 1004 000004CE F850 4022       LDR              R4, [R0, R2, LSL #2]
+ 1005 000004D2 F850 5023       LDR              R5, [R0, R3, LSL #2]
+ 1006 000004D6 F840 5022       STR              R5, [R0, R2, LSL #2]
+ 1007 000004DA F840 4023       STR              R4, [R0, R3, LSL #2]
+ 1008 000004DE F102 0201       ADD              R2, R2, #1
+ 1009 000004E2 F1A3 0301       SUB              R3, R3, #1
+ 1010 000004E6 E7F0            B                loop_rev
+ 1011 000004E8         end_reverse
+ 1012 000004E8 BDF0            LDMFD            sp!, {r4-r7, pc}
+ 1013 000004EA                 ENDP
+ 1014 000004EA         
+ 1015 000004EA         ; ------------------------------------------------------
+                       ----------------------
+ 1016 000004EA         ; Controllo quadrato perfetto
+ 1017 000004EA         ; Input: R0 = numero
+ 1018 000004EA         ; Output: R0 = 1 se quadrato perfetto, 0 altrimenti
+ 1019 000004EA         ; ------------------------------------------------------
+                       ----------------------
+ 1020 000004EA                 EXPORT           is_perfect_square
+ 1021 000004EA         is_perfect_square
+                               PROC
+ 1022 000004EA B5F0            STMFD            sp!, {r4-r7, lr}
+ 1023 000004EC F04F 0100       MOV              R1, #0      ; i = 0
+ 1024 000004F0         loop_square
+ 1025 000004F0 FB01 F201       MUL              R2, R1, R1
+ 1026 000004F4 4282            CMP              R2, R0
+ 1027 000004F6 D004            BEQ              square_yes
+ 1028 000004F8 4282            CMP              R2, R0
+ 1029 000004FA DC05            BGT              square_no
+ 1030 000004FC F101 0101       ADD              R1, R1, #1
+ 1031 00000500 E7F6            B                loop_square
+ 1032 00000502         square_yes
+ 1033 00000502 F04F 0001       MOV              R0, #1
+ 1034 00000506 E001            B                end_square
+ 1035 00000508         square_no
+ 1036 00000508 F04F 0000       MOV              R0, #0
+ 1037 0000050C         end_square
+ 1038 0000050C BDF0            LDMFD            sp!, {r4-r7, pc}
+ 1039 0000050E                 ENDP
+ 1040 0000050E         
+
+
+
+ARM Macro Assembler    Page 23 
+
+
+ 1041 0000050E         ; ======================================================
+                       ======================
+ 1042 0000050E         ; SEZIONE DATI (VARIABILI GLOBALI ASSEMBLY)
+ 1043 0000050E         ; ======================================================
+                       ======================
+ 1044 0000050E         
+ 1045 0000050E         ; Area Costanti (ReadOnly)
+ 1046 0000050E                 AREA             _data, DATA, READONLY, ALIGN=3
+ 1047 00000000                 EXPORT           my_vector
+ 1048 00000000                 EXPORT           my_variable
+ 1049 00000000 FFFFFFFB 
+              FFFFFF01 
+              0000000A 
+              00000014 
+              FFFFFFFE 
+              00000021 my_vector
+                               DCD              -5, 0xFFFFFF01, 10, 20, -2, 33 
+                                                            ; Vettore di prova
+ 1050 00000018 41      my_variable
+                               DCB              'A'         ; Variabile char
+ 1051 00000019         
+ 1052 00000019         ; Area Variabili (ReadWrite)
+ 1053 00000019                 AREA             _data2, DATA, READWRITE, ALIGN=
+3
+ 1054 00000000                 EXPORT           my_space_4_vector
+ 1055 00000000 00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+
+
+
+ARM Macro Assembler    Page 24 
+
+
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00 00 
+              00 00    my_space_4_vector
+                               SPACE            11*22       ; Spazio vuoto allo
+                                                            cato (Buffer)
+ 1056 000000F2         
+ 1057 000000F2                 END
+Command Line: --debug --xref --diag_suppress=9931,A1950W --cpu=Cortex-M3 --depe
+nd=.\objects\asm_funct.d -o.\objects\asm_funct.o -I.\Source -I.\Source\CMSIS_co
+re -I.\Source\GLCD -I.\Source\timer -I.\Source\button_EXINT -I.\Source\TouchPan
+el -I.\RTE\_SW_DEBUG -IC:\Users\Gaia\AppData\Local\Arm\Packs\ARM\CMSIS\6.2.0\CM
+SIS\Core\Include -IC:\Users\Gaia\AppData\Local\Arm\Packs\Keil\LPC1700_DFP\2.7.2
+\Device\Include --predefine="__EVAL SETA 1" --predefine="__UVISION_VERSION SETA
+ 543" --predefine="LPC175x_6x SETA 1" --predefine="_RTE_ SETA 1" --list=.\listi
+ngs\asm_funct.lst ASM_funct.s
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+Relocatable symbols
+
+.text 00000000
+
+Symbol: .text
+   Definitions
+      At line 15 in file ASM_funct.s
+   Uses
+      None
+Comment: .text unused
+array_average 0000034E
+
+Symbol: array_average
+   Definitions
+      At line 740 in file ASM_funct.s
+   Uses
+      At line 739 in file ASM_funct.s
+Comment: array_average used once
+array_count_bit1 000003EE
+
+Symbol: array_count_bit1
+   Definitions
+      At line 842 in file ASM_funct.s
+   Uses
+      At line 841 in file ASM_funct.s
+Comment: array_count_bit1 used once
+array_find 0000049E
+
+Symbol: array_find
+   Definitions
+      At line 971 in file ASM_funct.s
+   Uses
+      At line 970 in file ASM_funct.s
+Comment: array_find used once
+array_reverse 000004C0
+
+Symbol: array_reverse
+   Definitions
+      At line 997 in file ASM_funct.s
+   Uses
+      At line 996 in file ASM_funct.s
+Comment: array_reverse used once
+array_sum 0000032C
+
+Symbol: array_sum
+   Definitions
+      At line 715 in file ASM_funct.s
+   Uses
+      At line 714 in file ASM_funct.s
+Comment: array_sum used once
+base_fact 000001AE
+
+Symbol: base_fact
+   Definitions
+      At line 458 in file ASM_funct.s
+   Uses
+      At line 450 in file ASM_funct.s
+Comment: base_fact used once
+brianKernighan 00000220
+
+Symbol: brianKernighan
+
+
+
+ARM Macro Assembler    Page 2 Alphabetic symbol ordering
+Relocatable symbols
+
+   Definitions
+      At line 535 in file ASM_funct.s
+   Uses
+      At line 534 in file ASM_funct.s
+      At line 851 in file ASM_funct.s
+
+check_lowerCase 000002F8
+
+Symbol: check_lowerCase
+   Definitions
+      At line 679 in file ASM_funct.s
+   Uses
+      At line 678 in file ASM_funct.s
+Comment: check_lowerCase used once
+check_palindrome 00000170
+
+Symbol: check_palindrome
+   Definitions
+      At line 418 in file ASM_funct.s
+   Uses
+      At line 417 in file ASM_funct.s
+Comment: check_palindrome used once
+check_upperCase 00000312
+
+Symbol: check_upperCase
+   Definitions
+      At line 697 in file ASM_funct.s
+   Uses
+      At line 696 in file ASM_funct.s
+Comment: check_upperCase used once
+compress 00000000
+
+Symbol: compress
+   Definitions
+      At line 137 in file ASM_funct.s
+   Uses
+      At line 136 in file ASM_funct.s
+Comment: compress used once
+contatore_inrange 00000098
+
+Symbol: contatore_inrange
+   Definitions
+      At line 243 in file ASM_funct.s
+   Uses
+      At line 242 in file ASM_funct.s
+Comment: contatore_inrange used once
+count_leading_zero 0000023C
+
+Symbol: count_leading_zero
+   Definitions
+      At line 555 in file ASM_funct.s
+   Uses
+      At line 554 in file ASM_funct.s
+Comment: count_leading_zero used once
+count_negative_and_odd 000000E2
+
+Symbol: count_negative_and_odd
+   Definitions
+      At line 304 in file ASM_funct.s
+
+
+
+ARM Macro Assembler    Page 3 Alphabetic symbol ordering
+Relocatable symbols
+
+   Uses
+      At line 303 in file ASM_funct.s
+Comment: count_negative_and_odd used once
+count_set_bits 00000154
+
+Symbol: count_set_bits
+   Definitions
+      At line 395 in file ASM_funct.s
+   Uses
+      At line 394 in file ASM_funct.s
+Comment: count_set_bits used once
+do_2_complement 000002B6
+
+Symbol: do_2_complement
+   Definitions
+      At line 630 in file ASM_funct.s
+   Uses
+      At line 629 in file ASM_funct.s
+Comment: do_2_complement used once
+do_2_complement_64 000002C6
+
+Symbol: do_2_complement_64
+   Definitions
+      At line 643 in file ASM_funct.s
+   Uses
+      At line 642 in file ASM_funct.s
+Comment: do_2_complement_64 used once
+endBK 00000238
+
+Symbol: endBK
+   Definitions
+      At line 545 in file ASM_funct.s
+   Uses
+      At line 540 in file ASM_funct.s
+Comment: endBK used once
+endFunc 000002B2
+
+Symbol: endFunc
+   Definitions
+      At line 621 in file ASM_funct.s
+   Uses
+      At line 619 in file ASM_funct.s
+Comment: endFunc used once
+endFunc_1 000003EA
+
+Symbol: endFunc_1
+   Definitions
+      At line 833 in file ASM_funct.s
+   Uses
+      At line 831 in file ASM_funct.s
+Comment: endFunc_1 used once
+end_atoi 000001D8
+
+Symbol: end_atoi
+   Definitions
+      At line 487 in file ASM_funct.s
+   Uses
+      At line 477 in file ASM_funct.s
+      At line 481 in file ASM_funct.s
+
+
+
+ARM Macro Assembler    Page 4 Alphabetic symbol ordering
+Relocatable symbols
+
+
+end_bits 0000016E
+
+Symbol: end_bits
+   Definitions
+      At line 408 in file ASM_funct.s
+   Uses
+      At line 401 in file ASM_funct.s
+Comment: end_bits used once
+end_fact 000001B2
+
+Symbol: end_fact
+   Definitions
+      At line 459 in file ASM_funct.s
+   Uses
+      At line 456 in file ASM_funct.s
+Comment: end_fact used once
+end_find 000004BE
+
+Symbol: end_find
+   Definitions
+      At line 987 in file ASM_funct.s
+   Uses
+      At line 984 in file ASM_funct.s
+Comment: end_find used once
+end_gcd 00000462
+
+Symbol: end_gcd
+   Definitions
+      At line 909 in file ASM_funct.s
+   Uses
+      At line 900 in file ASM_funct.s
+Comment: end_gcd used once
+end_max 00000130
+
+Symbol: end_max
+   Definitions
+      At line 355 in file ASM_funct.s
+   Uses
+      At line 346 in file ASM_funct.s
+Comment: end_max used once
+end_pal 00000196
+
+Symbol: end_pal
+   Definitions
+      At line 437 in file ASM_funct.s
+   Uses
+      At line 434 in file ASM_funct.s
+Comment: end_pal used once
+end_power 0000048A
+
+Symbol: end_power
+   Definitions
+      At line 945 in file ASM_funct.s
+   Uses
+      At line 940 in file ASM_funct.s
+Comment: end_power used once
+end_prime 00000444
+
+
+
+
+ARM Macro Assembler    Page 5 Alphabetic symbol ordering
+Relocatable symbols
+
+Symbol: end_prime
+   Definitions
+      At line 886 in file ASM_funct.s
+   Uses
+      At line 883 in file ASM_funct.s
+Comment: end_prime used once
+end_range 000000CC
+
+Symbol: end_range
+   Definitions
+      At line 272 in file ASM_funct.s
+   Uses
+      At line 257 in file ASM_funct.s
+Comment: end_range used once
+end_reverse 000004E8
+
+Symbol: end_reverse
+   Definitions
+      At line 1011 in file ASM_funct.s
+   Uses
+      At line 1003 in file ASM_funct.s
+Comment: end_reverse used once
+end_square 0000050C
+
+Symbol: end_square
+   Definitions
+      At line 1037 in file ASM_funct.s
+   Uses
+      At line 1034 in file ASM_funct.s
+Comment: end_square used once
+end_upper 00000152
+
+Symbol: end_upper
+   Definitions
+      At line 385 in file ASM_funct.s
+   Uses
+      At line 372 in file ASM_funct.s
+Comment: end_upper used once
+exitFalse 000002AE
+
+Symbol: exitFalse
+   Definitions
+      At line 620 in file ASM_funct.s
+   Uses
+      At line 614 in file ASM_funct.s
+Comment: exitFalse used once
+exitFalse_1 000003E6
+
+Symbol: exitFalse_1
+   Definitions
+      At line 832 in file ASM_funct.s
+   Uses
+      At line 826 in file ASM_funct.s
+Comment: exitFalse_1 used once
+exitFuncV 000002F4
+
+Symbol: exitFuncV
+   Definitions
+      At line 669 in file ASM_funct.s
+
+
+
+ARM Macro Assembler    Page 6 Alphabetic symbol ordering
+Relocatable symbols
+
+   Uses
+      At line 666 in file ASM_funct.s
+Comment: exitFuncV used once
+exitMax 00000262
+
+Symbol: exitMax
+   Definitions
+      At line 578 in file ASM_funct.s
+   Uses
+      At line 571 in file ASM_funct.s
+Comment: exitMax used once
+exitMax_1 00000398
+
+Symbol: exitMax_1
+   Definitions
+      At line 785 in file ASM_funct.s
+   Uses
+      At line 778 in file ASM_funct.s
+Comment: exitMax_1 used once
+exitMin 00000282
+
+Symbol: exitMin
+   Definitions
+      At line 594 in file ASM_funct.s
+   Uses
+      At line 587 in file ASM_funct.s
+Comment: exitMin used once
+exitMin_1 000003B8
+
+Symbol: exitMin_1
+   Definitions
+      At line 806 in file ASM_funct.s
+   Uses
+      At line 799 in file ASM_funct.s
+Comment: exitMin_1 used once
+exitTrue 000002A8
+
+Symbol: exitTrue
+   Definitions
+      At line 618 in file ASM_funct.s
+   Uses
+      At line 607 in file ASM_funct.s
+Comment: exitTrue used once
+exitTrue_1 000003E0
+
+Symbol: exitTrue_1
+   Definitions
+      At line 830 in file ASM_funct.s
+   Uses
+      At line 819 in file ASM_funct.s
+Comment: exitTrue_1 used once
+exit_avg 0000036E
+
+Symbol: exit_avg
+   Definitions
+      At line 757 in file ASM_funct.s
+   Uses
+      At line 751 in file ASM_funct.s
+Comment: exit_avg used once
+
+
+
+ARM Macro Assembler    Page 7 Alphabetic symbol ordering
+Relocatable symbols
+
+exit_count 00000410
+
+Symbol: exit_count
+   Definitions
+      At line 855 in file ASM_funct.s
+   Uses
+      At line 848 in file ASM_funct.s
+Comment: exit_count used once
+exit_sum 00000348
+
+Symbol: exit_sum
+   Definitions
+      At line 729 in file ASM_funct.s
+   Uses
+      At line 723 in file ASM_funct.s
+Comment: exit_sum used once
+factorial_recursive 00000198
+
+Symbol: factorial_recursive
+   Definitions
+      At line 447 in file ASM_funct.s
+   Uses
+      At line 446 in file ASM_funct.s
+      At line 454 in file ASM_funct.s
+
+find_max 00000112
+
+Symbol: find_max
+   Definitions
+      At line 338 in file ASM_funct.s
+   Uses
+      At line 337 in file ASM_funct.s
+Comment: find_max used once
+fine_sort 00000090
+
+Symbol: fine_sort
+   Definitions
+      At line 230 in file ASM_funct.s
+   Uses
+      At line 221 in file ASM_funct.s
+      At line 225 in file ASM_funct.s
+
+found 000004B6
+
+Symbol: found
+   Definitions
+      At line 982 in file ASM_funct.s
+   Uses
+      At line 979 in file ASM_funct.s
+Comment: found used once
+gcd 00000446
+
+Symbol: gcd
+   Definitions
+      At line 896 in file ASM_funct.s
+   Uses
+      At line 895 in file ASM_funct.s
+      At line 923 in file ASM_funct.s
+
+
+
+
+ARM Macro Assembler    Page 8 Alphabetic symbol ordering
+Relocatable symbols
+
+get_and_sort 00000072
+
+Symbol: get_and_sort
+   Definitions
+      At line 211 in file ASM_funct.s
+   Uses
+      At line 210 in file ASM_funct.s
+Comment: get_and_sort used once
+get_max 00000248
+
+Symbol: get_max
+   Definitions
+      At line 567 in file ASM_funct.s
+   Uses
+      At line 566 in file ASM_funct.s
+Comment: get_max used once
+get_max_1 0000037E
+
+Symbol: get_max_1
+   Definitions
+      At line 774 in file ASM_funct.s
+   Uses
+      At line 773 in file ASM_funct.s
+Comment: get_max_1 used once
+get_min 00000268
+
+Symbol: get_min
+   Definitions
+      At line 583 in file ASM_funct.s
+   Uses
+      At line 582 in file ASM_funct.s
+Comment: get_min used once
+get_min_1 0000039E
+
+Symbol: get_min_1
+   Definitions
+      At line 795 in file ASM_funct.s
+   Uses
+      At line 794 in file ASM_funct.s
+Comment: get_min_1 used once
+int_power 00000478
+
+Symbol: int_power
+   Definitions
+      At line 936 in file ASM_funct.s
+   Uses
+      At line 935 in file ASM_funct.s
+Comment: int_power used once
+is_even 0000048E
+
+Symbol: is_even
+   Definitions
+      At line 956 in file ASM_funct.s
+   Uses
+      At line 955 in file ASM_funct.s
+Comment: is_even used once
+is_monotonic_increasing 00000288
+
+Symbol: is_monotonic_increasing
+
+
+
+ARM Macro Assembler    Page 9 Alphabetic symbol ordering
+Relocatable symbols
+
+   Definitions
+      At line 604 in file ASM_funct.s
+   Uses
+      At line 603 in file ASM_funct.s
+Comment: is_monotonic_increasing used once
+is_monotonic_increasing_1 000003BE
+
+Symbol: is_monotonic_increasing_1
+   Definitions
+      At line 816 in file ASM_funct.s
+   Uses
+      At line 815 in file ASM_funct.s
+Comment: is_monotonic_increasing_1 used once
+is_pal 0000018C
+
+Symbol: is_pal
+   Definitions
+      At line 433 in file ASM_funct.s
+   Uses
+      At line 424 in file ASM_funct.s
+Comment: is_pal used once
+is_perfect_square 000004EA
+
+Symbol: is_perfect_square
+   Definitions
+      At line 1021 in file ASM_funct.s
+   Uses
+      At line 1020 in file ASM_funct.s
+Comment: is_perfect_square used once
+is_prime 00000416
+
+Symbol: is_prime
+   Definitions
+      At line 866 in file ASM_funct.s
+   Uses
+      At line 865 in file ASM_funct.s
+Comment: is_prime used once
+lcm 00000464
+
+Symbol: lcm
+   Definitions
+      At line 919 in file ASM_funct.s
+   Uses
+      At line 918 in file ASM_funct.s
+Comment: lcm used once
+loop2 00000044
+
+Symbol: loop2
+   Definitions
+      At line 179 in file ASM_funct.s
+   Uses
+      At line 183 in file ASM_funct.s
+Comment: loop2 used once
+loop3 000000B4
+
+Symbol: loop3
+   Definitions
+      At line 256 in file ASM_funct.s
+   Uses
+
+
+
+ARM Macro Assembler    Page 10 Alphabetic symbol ordering
+Relocatable symbols
+
+      At line 270 in file ASM_funct.s
+Comment: loop3 used once
+loopBK 00000226
+
+Symbol: loopBK
+   Definitions
+      At line 538 in file ASM_funct.s
+   Uses
+      At line 544 in file ASM_funct.s
+Comment: loopBK used once
+loopCheck 00000296
+
+Symbol: loopCheck
+   Definitions
+      At line 610 in file ASM_funct.s
+   Uses
+      At line 617 in file ASM_funct.s
+      At line 829 in file ASM_funct.s
+
+loopCheck_1 000003CC
+
+Symbol: loopCheck_1
+   Definitions
+      At line 822 in file ASM_funct.s
+   Uses
+      None
+Comment: loopCheck_1 unused
+loopMax 00000254
+
+Symbol: loopMax
+   Definitions
+      At line 572 in file ASM_funct.s
+   Uses
+      At line 577 in file ASM_funct.s
+Comment: loopMax used once
+loopMax_1 0000038A
+
+Symbol: loopMax_1
+   Definitions
+      At line 779 in file ASM_funct.s
+   Uses
+      At line 784 in file ASM_funct.s
+Comment: loopMax_1 used once
+loopMin 00000274
+
+Symbol: loopMin
+   Definitions
+      At line 588 in file ASM_funct.s
+   Uses
+      At line 593 in file ASM_funct.s
+Comment: loopMin used once
+loopMin_1 000003AA
+
+Symbol: loopMin_1
+   Definitions
+      At line 800 in file ASM_funct.s
+   Uses
+      At line 805 in file ASM_funct.s
+Comment: loopMin_1 used once
+
+
+
+ARM Macro Assembler    Page 11 Alphabetic symbol ordering
+Relocatable symbols
+
+loopSort 0000007A
+
+Symbol: loopSort
+   Definitions
+      At line 217 in file ASM_funct.s
+   Uses
+      At line 228 in file ASM_funct.s
+Comment: loopSort used once
+loop_atoi 000001C0
+
+Symbol: loop_atoi
+   Definitions
+      At line 475 in file ASM_funct.s
+   Uses
+      At line 485 in file ASM_funct.s
+Comment: loop_atoi used once
+loop_avg 0000035E
+
+Symbol: loop_avg
+   Definitions
+      At line 749 in file ASM_funct.s
+   Uses
+      At line 755 in file ASM_funct.s
+Comment: loop_avg used once
+loop_bits 0000015C
+
+Symbol: loop_bits
+   Definitions
+      At line 400 in file ASM_funct.s
+   Uses
+      At line 406 in file ASM_funct.s
+Comment: loop_bits used once
+loop_chk 0000005C
+
+Symbol: loop_chk
+   Definitions
+      At line 192 in file ASM_funct.s
+   Uses
+      At line 198 in file ASM_funct.s
+Comment: loop_chk used once
+loop_count 000003FA
+
+Symbol: loop_count
+   Definitions
+      At line 846 in file ASM_funct.s
+   Uses
+      At line 854 in file ASM_funct.s
+Comment: loop_count used once
+loop_cp 00000012
+
+Symbol: loop_cp
+   Definitions
+      At line 145 in file ASM_funct.s
+   Uses
+      At line 157 in file ASM_funct.s
+Comment: loop_cp used once
+loop_find 000004A4
+
+Symbol: loop_find
+
+
+
+ARM Macro Assembler    Page 12 Alphabetic symbol ordering
+Relocatable symbols
+
+   Definitions
+      At line 974 in file ASM_funct.s
+   Uses
+      At line 981 in file ASM_funct.s
+Comment: loop_find used once
+loop_gcd 00000448
+
+Symbol: loop_gcd
+   Definitions
+      At line 898 in file ASM_funct.s
+   Uses
+      At line 908 in file ASM_funct.s
+Comment: loop_gcd used once
+loop_lsfr 000001F2
+
+Symbol: loop_lsfr
+   Definitions
+      At line 509 in file ASM_funct.s
+   Uses
+      At line 518 in file ASM_funct.s
+Comment: loop_lsfr used once
+loop_lsfr_end 0000020C
+
+Symbol: loop_lsfr_end
+   Definitions
+      At line 520 in file ASM_funct.s
+   Uses
+      At line 510 in file ASM_funct.s
+Comment: loop_lsfr_end used once
+loop_max 0000011E
+
+Symbol: loop_max
+   Definitions
+      At line 345 in file ASM_funct.s
+   Uses
+      At line 353 in file ASM_funct.s
+Comment: loop_max used once
+loop_pal 0000017A
+
+Symbol: loop_pal
+   Definitions
+      At line 423 in file ASM_funct.s
+   Uses
+      At line 431 in file ASM_funct.s
+Comment: loop_pal used once
+loop_power 00000482
+
+Symbol: loop_power
+   Definitions
+      At line 941 in file ASM_funct.s
+   Uses
+      At line 944 in file ASM_funct.s
+Comment: loop_power used once
+loop_prime 00000420
+
+Symbol: loop_prime
+   Definitions
+      At line 871 in file ASM_funct.s
+   Uses
+
+
+
+ARM Macro Assembler    Page 13 Alphabetic symbol ordering
+Relocatable symbols
+
+      At line 880 in file ASM_funct.s
+Comment: loop_prime used once
+loop_rev 000004CA
+
+Symbol: loop_rev
+   Definitions
+      At line 1001 in file ASM_funct.s
+   Uses
+      At line 1010 in file ASM_funct.s
+Comment: loop_rev used once
+loop_square 000004F0
+
+Symbol: loop_square
+   Definitions
+      At line 1024 in file ASM_funct.s
+   Uses
+      At line 1031 in file ASM_funct.s
+Comment: loop_square used once
+loop_sum 00000338
+
+Symbol: loop_sum
+   Definitions
+      At line 721 in file ASM_funct.s
+   Uses
+      At line 727 in file ASM_funct.s
+Comment: loop_sum used once
+loop_upper 00000138
+
+Symbol: loop_upper
+   Definitions
+      At line 370 in file ASM_funct.s
+   Uses
+      At line 383 in file ASM_funct.s
+Comment: loop_upper used once
+loopodd 000000F4
+
+Symbol: loopodd
+   Definitions
+      At line 312 in file ASM_funct.s
+   Uses
+      At line 325 in file ASM_funct.s
+Comment: loopodd used once
+my_atoi 000001B4
+
+Symbol: my_atoi
+   Definitions
+      At line 469 in file ASM_funct.s
+   Uses
+      At line 468 in file ASM_funct.s
+Comment: my_atoi used once
+my_division 000000D2
+
+Symbol: my_division
+   Definitions
+      At line 284 in file ASM_funct.s
+   Uses
+      At line 283 in file ASM_funct.s
+Comment: my_division used once
+next_odd 00000104
+
+
+
+ARM Macro Assembler    Page 14 Alphabetic symbol ordering
+Relocatable symbols
+
+
+Symbol: next_odd
+   Definitions
+      At line 322 in file ASM_funct.s
+   Uses
+      At line 315 in file ASM_funct.s
+      At line 318 in file ASM_funct.s
+
+next_state 000001DA
+
+Symbol: next_state
+   Definitions
+      At line 497 in file ASM_funct.s
+   Uses
+      At line 496 in file ASM_funct.s
+Comment: next_state used once
+noOverflow 000002DA
+
+Symbol: noOverflow
+   Definitions
+      At line 650 in file ASM_funct.s
+   Uses
+      At line 648 in file ASM_funct.s
+Comment: noOverflow used once
+nope 0000030A
+
+Symbol: nope
+   Definitions
+      At line 687 in file ASM_funct.s
+   Uses
+      At line 682 in file ASM_funct.s
+      At line 684 in file ASM_funct.s
+
+nope2 00000324
+
+Symbol: nope2
+   Definitions
+      At line 705 in file ASM_funct.s
+   Uses
+      At line 700 in file ASM_funct.s
+      At line 702 in file ASM_funct.s
+
+not_found 000004BA
+
+Symbol: not_found
+   Definitions
+      At line 985 in file ASM_funct.s
+   Uses
+      At line 976 in file ASM_funct.s
+Comment: not_found used once
+not_pal 00000192
+
+Symbol: not_pal
+   Definitions
+      At line 435 in file ASM_funct.s
+   Uses
+      At line 430 in file ASM_funct.s
+Comment: not_pal used once
+not_prime 00000440
+
+
+
+ARM Macro Assembler    Page 15 Alphabetic symbol ordering
+Relocatable symbols
+
+
+Symbol: not_prime
+   Definitions
+      At line 884 in file ASM_funct.s
+   Uses
+      At line 869 in file ASM_funct.s
+      At line 878 in file ASM_funct.s
+
+outOfRange 000002F0
+
+Symbol: outOfRange
+   Definitions
+      At line 667 in file ASM_funct.s
+   Uses
+      At line 662 in file ASM_funct.s
+      At line 664 in file ASM_funct.s
+
+prime_yes 0000043A
+
+Symbol: prime_yes
+   Definitions
+      At line 881 in file ASM_funct.s
+   Uses
+      At line 874 in file ASM_funct.s
+Comment: prime_yes used once
+skip_rg 000000C6
+
+Symbol: skip_rg
+   Definitions
+      At line 269 in file ASM_funct.s
+   Uses
+      At line 262 in file ASM_funct.s
+      At line 265 in file ASM_funct.s
+
+skip_upper 0000014C
+
+Symbol: skip_upper
+   Definitions
+      At line 382 in file ASM_funct.s
+   Uses
+      At line 375 in file ASM_funct.s
+      At line 377 in file ASM_funct.s
+
+sopra_la_media 00000036
+
+Symbol: sopra_la_media
+   Definitions
+      At line 171 in file ASM_funct.s
+   Uses
+      At line 170 in file ASM_funct.s
+Comment: sopra_la_media used once
+square_no 00000508
+
+Symbol: square_no
+   Definitions
+      At line 1035 in file ASM_funct.s
+   Uses
+      At line 1029 in file ASM_funct.s
+Comment: square_no used once
+
+
+
+ARM Macro Assembler    Page 16 Alphabetic symbol ordering
+Relocatable symbols
+
+square_yes 00000502
+
+Symbol: square_yes
+   Definitions
+      At line 1032 in file ASM_funct.s
+   Uses
+      At line 1027 in file ASM_funct.s
+Comment: square_yes used once
+string_to_upper 00000134
+
+Symbol: string_to_upper
+   Definitions
+      At line 366 in file ASM_funct.s
+   Uses
+      At line 365 in file ASM_funct.s
+Comment: string_to_upper used once
+value_is_in_a_range 000002DE
+
+Symbol: value_is_in_a_range
+   Definitions
+      At line 659 in file ASM_funct.s
+   Uses
+      At line 658 in file ASM_funct.s
+Comment: value_is_in_a_range used once
+zero_avg 00000376
+
+Symbol: zero_avg
+   Definitions
+      At line 763 in file ASM_funct.s
+   Uses
+      At line 744 in file ASM_funct.s
+Comment: zero_avg used once
+113 symbols
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+Relocatable symbols
+
+_data 00000000
+
+Symbol: _data
+   Definitions
+      At line 1046 in file ASM_funct.s
+   Uses
+      None
+Comment: _data unused
+my_variable 00000018
+
+Symbol: my_variable
+   Definitions
+      At line 1050 in file ASM_funct.s
+   Uses
+      At line 1048 in file ASM_funct.s
+Comment: my_variable used once
+my_vector 00000000
+
+Symbol: my_vector
+   Definitions
+      At line 1049 in file ASM_funct.s
+   Uses
+      At line 1047 in file ASM_funct.s
+Comment: my_vector used once
+3 symbols
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+Relocatable symbols
+
+_data2 00000000
+
+Symbol: _data2
+   Definitions
+      At line 1053 in file ASM_funct.s
+   Uses
+      None
+Comment: _data2 unused
+my_space_4_vector 00000000
+
+Symbol: my_space_4_vector
+   Definitions
+      At line 1055 in file ASM_funct.s
+   Uses
+      At line 1054 in file ASM_funct.s
+Comment: my_space_4_vector used once
+2 symbols
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+External symbols
+
+__aeabi_fdiv 00000000
+
+Symbol: __aeabi_fdiv
+   Definitions
+      At line 12 in file ASM_funct.s
+   Uses
+      At line 292 in file ASM_funct.s
+Comment: __aeabi_fdiv used once
+1 symbol
+453 symbols in table
